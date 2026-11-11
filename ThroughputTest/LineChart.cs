@@ -52,6 +52,26 @@ public class LineChartControl
         _chart.Series.Add(_series);
     }
 
+    // Y축 범위와 눈금 간격을 고정 (interval이 0이면 간격은 자동)
+    public void SetYAxisFixed(double min, double max, double interval)
+    {
+        Axis y = _chart.ChartAreas["MainArea"].AxisY;
+        y.Minimum = min;
+        y.Maximum = max;
+        y.Interval = interval;
+        _chart.Invalidate();
+    }
+
+    // Y축 고정 해제 (자동 범위로 복귀)
+    public void SetYAxisAuto()
+    {
+        Axis y = _chart.ChartAreas["MainArea"].AxisY;
+        y.Minimum = double.NaN;
+        y.Maximum = double.NaN;
+        y.Interval = 0;
+        _chart.Invalidate();
+    }
+
     // 데이터 한 건 추가
     public void AddPoint(string x, double y)
     {
@@ -60,6 +80,23 @@ public class LineChartControl
         point.YValues = new double[] { y };
 
         _series.Points.Add(point);
+        _chart.Invalidate();
+    }
+
+    // 가장 높은 값(동률이면 모두)의 점과 라벨을 빨간색으로 표시
+    public void HighlightMax()
+    {
+        if (_series.Points.Count == 0) return;
+
+        double max = _series.Points.Max(p => p.YValues[0]);
+        foreach (WinPoint p in _series.Points)
+        {
+            bool isMax = p.YValues[0] == max;
+            p.Color = isMax ? Color.Red : Color.Empty;
+            p.MarkerColor = isMax ? Color.Red : Color.Empty;
+            p.LabelForeColor = isMax ? Color.Red : Color.Black;
+            p.MarkerSize = isMax ? 10 : 6;
+        }
         _chart.Invalidate();
     }
 

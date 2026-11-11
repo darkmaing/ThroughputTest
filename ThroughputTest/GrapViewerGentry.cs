@@ -31,6 +31,7 @@ namespace ThroughputTest
             for (int i = 0; i < lineChart.Length; i++)
             {
                 lineChart[i] = new LineChartControl();
+                lineChart[i].SetYAxisFixed(0, 550, 50);   // 0~100, 10 간격
             }
 
             this.ClientSize = new System.Drawing.Size(1669, 841);
@@ -102,6 +103,7 @@ namespace ThroughputTest
 
                 addValue(int.Parse(data1[0])-1, data1[1], int.Parse(data1[2]) );
             }
+            foreach (LineChartControl chart in lineChart) chart.HighlightMax();
         }
 
         public void addValue(int gentrynum, string sttime, int data)

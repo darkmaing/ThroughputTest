@@ -1,4 +1,5 @@
 ﻿using ExcelDataReader;
+using NPOI.SS.Formula.PTG;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -7,7 +8,11 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Windows.Forms;
+using System.Windows.Interop;
+
+
 
 namespace ThroughputTest
 {
@@ -28,6 +33,11 @@ namespace ThroughputTest
         // 엑셀에서 읽은 출고 데이터
         private List<StReleaseInfo> m_stackerList = new List<StReleaseInfo>();      // 스태커 출하 정보 데이터
         private List<StReleaseInfo> m_gentryList = new List<StReleaseInfo>();       // 갠트리 출하 정보 데이터.
+        private List<string> m_logList = new List<string>();       // 로그 리스트
+
+        private readonly object _lockObject = new object();
+
+
 
         // 그래프 화면 (panel1 안에 도킹, 콤보박스로 전환)
         private readonly GrapViewerStacker m_stackerViewer;
@@ -39,6 +49,24 @@ namespace ThroughputTest
         private readonly Dictionary<Control, Rectangle> m_baseBounds = new Dictionary<Control, Rectangle>();
         private readonly Dictionary<Control, Font> m_baseFonts = new Dictionary<Control, Font>();
         private bool m_layoutReady;
+
+        private Thread m_workerThread;
+        private volatile bool m_isRunning = false;
+
+
+        // panel1, panel2 안의 컨트롤도 함께 비율 조정되도록 재귀 등록한다
+        private void RegisterLayout(Control.ControlCollection controls)
+        {
+            foreach (Control c in controls)
+            {
+                m_baseBounds[c] = c.Bounds;
+                m_baseFonts[c] = c.Font;
+                if (c is Panel && c != ViewChart)
+                {
+                    RegisterLayout(c.Controls);
+                }
+            }
+        }
 
         private void ApplyLayout()
         {
@@ -71,20 +99,133 @@ namespace ThroughputTest
             ResumeLayout(true);
         }
 
+        // ListView는 첫 번째 컬럼을 항상 왼쪽 정렬하므로, 직접 그려서 모든 컬럼을 가운데 정렬한다
+        private const TextFormatFlags CenterFlags =
+            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter |
+            TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine;
+
+        private static void InitCenteredListView(ListView lv)
+        {
+            lv.OwnerDraw = true;
+
+            lv.DrawColumnHeader += (s, e) =>
+            {
+                e.Graphics.FillRectangle(SystemBrushes.Control, e.Bounds);
+                ControlPaint.DrawBorder3D(e.Graphics, e.Bounds, Border3DStyle.RaisedInner);
+                TextRenderer.DrawText(e.Graphics, e.Header.Text, e.Font, e.Bounds, SystemColors.ControlText, CenterFlags);
+            };
+
+            lv.DrawItem += (s, e) => { };
+
+            lv.DrawSubItem += (s, e) =>
+            {
+                // OwnerDraw에서는 선택 배경이 자동으로 그려지지 않으므로 직접 칠한다
+                // 빨간 글자(최댓값 행)는 연한 배경을 써서 글자가 보이게 한다
+                bool red = e.SubItem.ForeColor == Color.Red;
+                Color color = e.SubItem.ForeColor;
+                if (e.Item.Selected)
+                {
+                    Color back = red ? Color.MistyRose : SystemColors.Highlight;
+                    if (!red) color = SystemColors.HighlightText;
+                    using (var br = new SolidBrush(back)) e.Graphics.FillRectangle(br, e.Bounds);
+                }
+                else
+                {
+                    e.DrawBackground();
+                }
+                TextRenderer.DrawText(e.Graphics, e.SubItem.Text, e.SubItem.Font, e.Bounds, color, CenterFlags);
+                if (lv.GridLines)
+                {
+                    Rectangle b = e.Bounds;
+                    e.Graphics.DrawLine(SystemPens.ControlLight, b.Left, b.Bottom - 1, b.Right, b.Bottom - 1);
+                    e.Graphics.DrawLine(SystemPens.ControlLight, b.Right - 1, b.Top, b.Right - 1, b.Bottom);
+                }
+            };
+        }
+        // Total(마지막 컬럼)이 가장 큰 행(동률이면 모두)을 빨간색으로 표시하고 선택 상태로 만든다
+        private static void HighlightMaxTotal(ListView lv)
+        {
+            int col = lv.Columns.Count - 1;
+            int max = int.MinValue;
+            foreach (ListViewItem item in lv.Items)
+            {
+                if (int.TryParse(item.SubItems[col].Text, out int v) && v > max) max = v;
+            }
+            foreach (ListViewItem item in lv.Items)
+            {
+                bool isMax = int.TryParse(item.SubItems[col].Text, out int v) && v == max;
+                foreach (ListViewItem.ListViewSubItem sub in item.SubItems)
+                {
+                    sub.ForeColor = isMax ? Color.Red : lv.ForeColor;
+                }
+                item.Selected = isMax;
+                if (isMax) item.EnsureVisible();
+            }
+        }
+        // 리스트뷰의 컬럼들이 너비를 균등하게 나눠 쓴다
+        private static void FitColumns(ListView lv)
+        {
+            int w = lv.ClientSize.Width;
+            int n = lv.Columns.Count;
+            if (w <= 0 || n == 0) return;
+            for (int i = 0; i < n - 1; i++) lv.Columns[i].Width = w / n;
+            lv.Columns[n - 1].Width = w - (n - 1) * (w / n);
+        }
+        // 창이 닫힐 때(X 버튼, Alt+F4, Close()) 호출되는 이벤트 핸들러
+        private void Main_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            ExitProgram();
+        }
+        // 프로그램이 종료될 때(창 닫기 포함) 항상 호출된다. 로그와 선택한 파일 경로를 실행 폴더의 파일에 추가 저장
+        private void ExitProgram()
+        {
+            AddLog("프로그램 종료");
+            StopThread();
+            try
+            {
+                var sb = new System.Text.StringBuilder();
+                sb.AppendLine("[" + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "] 프로그램 종료");
+                sb.AppendLine("Stacker 파일: " + File_Path_Stacker.Text);
+                sb.AppendLine("Gantry 파일: " + File_Path_Gantry.Text);
+                foreach (object item in logtext.Items) sb.AppendLine("  " + item);
+                string path = System.IO.Path.Combine(Application.StartupPath, "ThroughputTest.log");
+                System.IO.File.AppendAllText(path, sb.ToString(), System.Text.Encoding.UTF8);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(ex.Message);
+            }
+        }
+        // 로그를 대기 리스트에 넣는다. 작업 스레드가 DisplayLog()로 logtext에 표시한다
+        private void AddLog(string msg)
+        {
+            lock (_lockObject)
+            {
+                m_logList.Add(msg);
+            }
+        }
+
+    
         public Main()
         {
             InitializeComponent();
 
             m_baseClientSize = ClientSize;
-            foreach (Control c in Controls)
-            {
-                m_baseBounds[c] = c.Bounds;
-                m_baseFonts[c] = c.Font;
-            }
+            RegisterLayout(Controls);
             m_layoutReady = true;
 
+            InitCenteredListView(GENTRY_DATA);
+            InitCenteredListView(STACKER_DATA);
+            InitCenteredListView(GENTRY_DATA2);
+            GENTRY_DATA.ClientSizeChanged += (s, e) => FitColumns(GENTRY_DATA);
+            STACKER_DATA.ClientSizeChanged += (s, e) => FitColumns(STACKER_DATA);
+            GENTRY_DATA2.ClientSizeChanged += (s, e) => FitColumns(GENTRY_DATA2);
+            FitColumns(GENTRY_DATA);
+            FitColumns(STACKER_DATA);
+            FitColumns(GENTRY_DATA2);
             SizeChanged += (s, e) => ApplyLayout();
             Load += (s, e) => ApplyLayout();
+            FormClosing += Main_FormClosing;
             WindowState = FormWindowState.Maximized;
             // 그래프
             m_stackerViewer = new GrapViewerStacker();
@@ -118,9 +259,8 @@ namespace ThroughputTest
             Combo_Graph.SelectedIndex = 0;
             File_Path_Stacker.Text = "C:\\DATA\\CRANE.xls";
             File_Path_Gantry.Text = "C:\\DATA\\GANTRY.xls";
-
+            StartThread();
         }
-
         // 스태커 / 갠트리 집계 대상 목적지 번호
         private static readonly int[] StackerDestinations = { 1310, 1320, 1330, 1340, 1350, 1360 };
         private static readonly int[] GentryDestinations = { 1411, 1420, 1430, 1440, 1450, 1460, 1470, 1480, 1491 };
@@ -289,7 +429,14 @@ namespace ThroughputTest
                 string reportData = makeHourlyExtractorfnStackerCounting();
                 m_stackerViewer.makeChart(reportData);
                 sw.WriteLine(reportData);
-                STACKER_DATA.Text = reportData;
+                // 시간별 집계를 리스트뷰(Time / Total 컬럼)에 표시
+                foreach (string row in reportData.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries))
+                {
+                    string[] cols = row.Split(new[] { ':' }, StringSplitOptions.None);
+                    string hour = int.Parse(cols[0].Trim()).ToString("00") + "시";
+                    STACKER_DATA.Items.Add(new ListViewItem(new[] { hour, cols[1].Trim() }));
+                }
+                HighlightMaxTotal(STACKER_DATA);
             }
             sw.Close();
         }
@@ -321,18 +468,32 @@ namespace ThroughputTest
                 string reportData = makeHourlyExtractorfnGantryCounting();
                 sw.WriteLine("도크,시간,총수량+\r\n" + reportData);
 
+
+                foreach (string row in reportData.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries))
+                {
+                    string[] cols = row.Split(new[] { " / " }, StringSplitOptions.None);
+                    GENTRY_DATA.Items.Add(new ListViewItem(cols));
+                }
+                HighlightMaxTotal(GENTRY_DATA);
+
+
                 m_gentryViewer.makeChart(reportData);
 
                 // 도크 3개씩 묶은 시간 집계 → 갠트리2 그래프(3개)
-                string reportData2 = fnGentryCounting2();
+                string reportData2 = GentryCounting2();
 
                 m_gentryViewer2.makeChart(reportData2);
 
-                // 도크별 집계를 리스트박스에 표시
-                GENTRY_DATA.Items.AddRange(
-                reportData2.Split(new[] { "\r\n", "\n" },
-                StringSplitOptions.None)
-                );
+                foreach (string row in reportData2.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries))
+                {
+                    string[] cols = row.Split(new[] { " / " }, StringSplitOptions.None);
+                    GENTRY_DATA2.Items.Add(new ListViewItem(cols));
+                }
+                HighlightMaxTotal(GENTRY_DATA2);
+
+
+                // 도크별 집계를 리스트뷰(Dock / Time / Total 컬럼)에 표시
+
             }
             sw.Close();
         }
@@ -343,16 +504,18 @@ namespace ThroughputTest
             if (GENTRY_DATA.IsHandleCreated)
             {
                 GENTRY_DATA.Invoke((MethodInvoker)delegate {
-                    STACKER_DATA.Text = "";
+                    STACKER_DATA.Items.Clear();
                     GENTRY_DATA.Items.Clear();
+                    GENTRY_DATA2.Items.Clear();
                 });
             }
             else
             {
                 // 핸들이 아직 없다면 메인 스레드가 알아서 지우도록 위임
                 BeginInvoke((MethodInvoker)delegate {
-                    STACKER_DATA.Text = "";
+                    STACKER_DATA.Items.Clear();
                     GENTRY_DATA.Items.Clear();
+                    GENTRY_DATA2.Items.Clear();
                 });
             }
 
@@ -364,6 +527,7 @@ namespace ThroughputTest
             else
             {
                 GENTRY_DATA.Items.Clear();
+                GENTRY_DATA2.Items.Clear();
             }
 
             // 스태커: 경로가 비어 있으면 기본 파일 사용
@@ -376,12 +540,17 @@ namespace ThroughputTest
             {
                 filePath = File_Path_Stacker.Text;
             }
+            AddLog("스태커 파일 읽기 시작: " + filePath);
             readStackerData(filePath);
+            AddLog("스태커 출고 데이터 " + m_stackerList.Count + "건 읽음");
 
             m_stackerList.Sort((a, b) => a.date.CompareTo(b.date));
+
+            Label_Stack_Date.Text = "Date  :  " + m_stackerList[0].date + "~ \r\n                    " + m_stackerList[m_stackerList.Count - 1].date;                         // 가장 이른 날짜/시간
+            
             SaveStakerData();
 
-            logtext.Text = "Crane 데이터 출력";
+            AddLog("Crane 데이터 출력");
 
             // 갠트리: 경로가 비어 있으면 기본 파일 사용
             filePath = "";
@@ -393,11 +562,18 @@ namespace ThroughputTest
             {
                 filePath = File_Path_Gantry.Text;
             }
-            logtext.Text = "갠트리 데이터 출력";
+            AddLog("갠트리 파일 읽기 시작: " + filePath);
 
             readGentryData(filePath);
 
+            m_gentryList.Sort((a, b) => a.date.CompareTo(b.date));
+
+            Label_Gantry_Date.Text = "Date  :  " + m_gentryList[0].date + "~ \r\n                  " + m_gentryList[m_gentryList.Count - 1].date;                         // 가장 이른 날짜/시간
+
+            AddLog("갠트리 출고 데이터 " + m_gentryList.Count + "건 읽음");
+
             SaveGentryData();
+            AddLog("갠트리 데이터 출력");
         }
 
         private void Btn_Stacker_File_Click(object sender, EventArgs e)
@@ -408,7 +584,7 @@ namespace ThroughputTest
                 File_Path_Stacker.Text = filePath;
             }
 
-            logtext.Text = File_Path_Stacker.Text + "파일이 선택 되었습니다. ";
+            AddLog(File_Path_Stacker.Text + "파일이 선택 되었습니다. ");
         }
 
         private void Btn_Capture_Click(object sender, EventArgs e)
@@ -457,6 +633,7 @@ namespace ThroughputTest
                     // JPG 파일로 저장
                     bitmap.Save(FileName, ImageFormat.Jpeg);
                 }
+                AddLog("화면 캡처 저장: " + FileName);
 
                 MessageBox.Show(
                     "화면 캡처가 저장되었습니다.\r\n" + FileName,
@@ -466,6 +643,7 @@ namespace ThroughputTest
             }
             catch (Exception ex)
             {
+                AddLog("화면 캡처 오류: " + ex.Message);
                 MessageBox.Show(
                     "화면 캡처 중 오류가 발생했습니다.\r\n" + ex.Message,
                     "오류",
@@ -482,7 +660,7 @@ namespace ThroughputTest
                 File_Path_Gantry.Text = filePath;
             }
 
-            logtext.Text = File_Path_Gantry.Text + "파일이 선택 되었습니다. ";
+            AddLog(File_Path_Gantry.Text + "파일이 선택 되었습니다. ");
         }
 
         /// <summary>스태커 시간별 집계. "시 : 수량" 줄 목록 (1건 = 24개로 계산)</summary>
@@ -523,7 +701,7 @@ namespace ThroughputTest
         }
 
         /// <summary>갠트리 도크 그룹(1~3, 4~6, 7~9)별·시간별 집계. "그룹 / 시 / 수량" 줄 목록</summary>
-        private string fnGentryCounting2()
+        private string GentryCounting2()
         {
             string result = string.Join(
                 Environment.NewLine,
@@ -554,6 +732,7 @@ namespace ThroughputTest
         // 선택한 그래프 화면(0:스태커, 1:갠트리, 2:갠트리2)만 보이게 전환
         private void combo_graph_view_SelectedIndexChanged(object sender, EventArgs e)
         {
+            AddLog("그래프 전환: " + Combo_Graph.Text);
             if (Combo_Graph.SelectedIndex == 0)
             {
                 m_stackerViewer.Show();
@@ -573,8 +752,70 @@ namespace ThroughputTest
                 m_gentryViewer2.Show();
             }
         }
-
         // 캡처 버튼: 전체 화면을 "날짜_그래프종류.jpg"로 저장
-       
+
+        private void StartThread()
+        {
+            if (m_workerThread != null &&
+                m_workerThread.IsAlive)
+                return;
+
+            m_isRunning = true;
+            AddLog("로그 작업 스레드 시작");
+
+            m_workerThread = new Thread(WorkerProcess);
+            m_workerThread.IsBackground = true;
+            m_workerThread.Start();
+        }
+
+        // 쓰레드 작업
+        private void WorkerProcess()
+        {
+            while (m_isRunning)
+            {
+                DisplayLog();
+                // 실제 작업 수행
+                Thread.Sleep(1000);
+            }
+        }
+
+        // 쓰레드 정지 요청
+        private void StopThread()
+        {
+            m_isRunning = false;
+            if (m_workerThread != null && m_workerThread.IsAlive)
+                m_workerThread.Join();
+        }
+
+        // m_logList에 쌓인 로그를 모두 꺼내 logtext에 표시한다. 작업 스레드에서 호출된다
+        public void DisplayLog()
+        {
+            string[] pending;
+            lock (_lockObject)
+            {
+                if (m_logList.Count == 0) return;
+                pending = m_logList.ToArray();
+                m_logList.Clear();
+            }
+
+            if (IsDisposed || !logtext.IsHandleCreated) return;
+
+            try
+            {
+                logtext.BeginInvoke(new Action<string[]>(AppendLogItems), (object)pending);
+            }
+            catch (InvalidOperationException)
+            {
+                // 창이 닫히는 중이면 표시하지 않는다
+            }
+        }
+        // UI 스레드에서 실행: 로그를 ListBox에 추가하고 맨 아래로 스크롤
+        private void AppendLogItems(string[] items)
+        {
+            logtext.BeginUpdate();
+            logtext.Items.AddRange(items);
+            logtext.EndUpdate();
+            logtext.TopIndex = logtext.Items.Count - 1;
+        }
     }
 }

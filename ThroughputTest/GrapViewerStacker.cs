@@ -21,6 +21,7 @@ namespace ThroughputTest
             this.ControlBox = false;
             this.Name = "GrapViewerStacker";
             this.ResumeLayout(false);
+           lineChart.SetYAxisFixed(100, 4100,500);   // 0~100, 10 간격
             panel1.Controls.Add(lineChart.Chart);
         }
 
@@ -38,6 +39,7 @@ namespace ThroughputTest
 
                 addValue(data1[0], int.Parse(data1[1]));
             }
+            lineChart.HighlightMax();
         }
 
         public void addValue(string sttime, int data)
