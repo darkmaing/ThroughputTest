@@ -225,6 +225,9 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="GrapViewerGentry3.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="Main.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -243,6 +246,9 @@
     <Compile Include="LineChart.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <EmbeddedResource Include="GrapViewerGentry3.resx">
+      <DependentUpon>GrapViewerGentry3.cs</DependentUpon>
+    </EmbeddedResource>
     <EmbeddedResource Include="Main.resx">
       <DependentUpon>Main.cs</DependentUpon>
     </EmbeddedResource>

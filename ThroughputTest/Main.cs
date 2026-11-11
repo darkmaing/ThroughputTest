@@ -43,6 +43,7 @@ namespace ThroughputTest
         private readonly GrapViewerStacker m_stackerViewer;
         private readonly GrapViewerGentry m_gentryViewer;
         private readonly GrapViewerGentry2 m_gentryViewer2;
+        private readonly GrapViewerGentry3 m_gentryViewer3;
 
         // 디자인 시점의 각 컨트롤 위치/크기/글꼴. 창 크기 비율에 맞춰 모두 같이 키운다.
         private Size m_baseClientSize;
@@ -201,7 +202,7 @@ namespace ThroughputTest
         {
             lock (_lockObject)
             {
-                m_logList.Add(msg);
+                m_logList.Add("[" + DateTime.Now.ToString("HH:mm:ss") + "] " + msg);
             }
         }
 
@@ -217,6 +218,9 @@ namespace ThroughputTest
             InitCenteredListView(GENTRY_DATA);
             InitCenteredListView(STACKER_DATA);
             InitCenteredListView(GENTRY_DATA2);
+            InitCenteredListView(GENTRY_DATA3);
+            GENTRY_DATA3.ClientSizeChanged += (s, e) => FitColumns(GENTRY_DATA3);
+            FitColumns(GENTRY_DATA3);
             GENTRY_DATA.ClientSizeChanged += (s, e) => FitColumns(GENTRY_DATA);
             STACKER_DATA.ClientSizeChanged += (s, e) => FitColumns(STACKER_DATA);
             GENTRY_DATA2.ClientSizeChanged += (s, e) => FitColumns(GENTRY_DATA2);
@@ -243,9 +247,14 @@ namespace ThroughputTest
             m_gentryViewer2.FormBorderStyle = FormBorderStyle.None;
             m_gentryViewer2.Dock = DockStyle.Fill;
 
+            m_gentryViewer3 = new GrapViewerGentry3();
+            m_gentryViewer3.TopLevel = false;
+            m_gentryViewer3.FormBorderStyle = FormBorderStyle.None;
+            m_gentryViewer3.Dock = DockStyle.Fill;
             ViewChart.Controls.Add(m_stackerViewer);
             ViewChart.Controls.Add(m_gentryViewer);
             ViewChart.Controls.Add(m_gentryViewer2);
+            ViewChart.Controls.Add(m_gentryViewer3);
 
             // 처음에는 갠트리 그래프만 표시
             m_stackerViewer.Hide();
@@ -255,6 +264,7 @@ namespace ThroughputTest
             Combo_Graph.Items.Add("스태커 그래프");
             Combo_Graph.Items.Add("갠트리 그래프");
             Combo_Graph.Items.Add("갠트리2 그래프");
+            Combo_Graph.Items.Add("갠트리3 그래프");
 
             Combo_Graph.SelectedIndex = 0;
             File_Path_Stacker.Text = "C:\\DATA\\CRANE.xls";
@@ -491,6 +501,20 @@ namespace ThroughputTest
                 }
                 HighlightMaxTotal(GENTRY_DATA2);
 
+                string peakData = GentryPeakHourCounting();
+                m_gentryViewer3.makeChart(peakData);
+                foreach (string row in peakData.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries))
+                {
+                    GENTRY_DATA3.Items.Add(new ListViewItem(row.Split(new[] { " / " }, StringSplitOptions.None)));
+                }
+                if (GENTRY_DATA3.Items.Count > 0)
+                {
+                    int total = GENTRY_DATA3.Items.Cast<ListViewItem>().Sum(i => int.Parse(i.SubItems[2].Text));
+                    var totalItem = new ListViewItem(new[] { "", "총 합계", total.ToString() });
+                    totalItem.Font = new Font(GENTRY_DATA3.Font, FontStyle.Bold);
+                    GENTRY_DATA3.Items.Add(totalItem);
+                }
+
 
                 // 도크별 집계를 리스트뷰(Dock / Time / Total 컬럼)에 표시
 
@@ -507,19 +531,21 @@ namespace ThroughputTest
                     STACKER_DATA.Items.Clear();
                     GENTRY_DATA.Items.Clear();
                     GENTRY_DATA2.Items.Clear();
+                    GENTRY_DATA3.Items.Clear();
                 });
             }
             else
             {
-                // 핸들이 아직 없다면 메인 스레드가 알아서 지우도록 위임
+                // 핸들이
                 BeginInvoke((MethodInvoker)delegate {
                     STACKER_DATA.Items.Clear();
                     GENTRY_DATA.Items.Clear();
                     GENTRY_DATA2.Items.Clear();
+                    GENTRY_DATA3.Items.Clear();
                 });
             }
 
-            // 2. GENTRY_DATA 안전하게 비우기 (개별 체크)
+            // 2.
             if (GENTRY_DATA.InvokeRequired)
             {
                 GENTRY_DATA.Invoke((MethodInvoker)(() => GENTRY_DATA.Items.Clear()));
@@ -726,6 +752,52 @@ namespace ThroughputTest
             return result;
         }
 
+        /// <summary>도크 그룹별 시간 집계 중 수량이 가장 큰 그룹을 골라, 그 그룹을 분 단위로 1시간 구간을 밀며 합계가 가장 큰 구간에 속한 출고 내역을 "도크 / 일시 / 수량" 줄 목록으로 반환한다.</summary>
+        private string GentryPeakHourCounting()
+        {
+            if (m_gentryList.Count == 0) return "";
+
+            var best = m_gentryList
+                .GroupBy(x => new { Group = (x.dock - 1) / 3, Hour = DateTime.Parse(x.date).Date.AddHours(DateTime.Parse(x.date).Hour) })
+                .Select(g => new { g.Key.Group, Total = g.Sum(x => x.tyreCount) })
+                .OrderByDescending(g => g.Total)
+                .First();
+
+            var events = m_gentryList
+                .Where(x => (x.dock - 1) / 3 == best.Group)
+                .Select(x => new { Time = DateTime.Parse(x.date), Info = x })
+                .OrderBy(x => x.Time)
+                .ToList();
+
+            // 구간 시작은 이벤트가 있는 분만 확인하면 충분하다
+            int bestStart = 0;
+            int bestEnd = 0;
+            int bestSum = -1;
+            int end = 0;
+            int sum = 0;
+            for (int start = 0; start < events.Count; start++)
+            {
+                if (start > 0) sum -= events[start - 1].Info.tyreCount;
+                DateTime startMinute = new DateTime(events[start].Time.Year, events[start].Time.Month, events[start].Time.Day, events[start].Time.Hour, events[start].Time.Minute, 0);
+                while (end < events.Count && events[end].Time <= startMinute.AddMinutes(60).AddSeconds(9))
+                {
+                    sum += events[end].Info.tyreCount;
+                    end++;
+                }
+                if (sum > bestSum)
+                {
+                    bestSum = sum;
+                    bestStart = start;
+                    bestEnd = end;
+                }
+            }
+
+            // 해당 구간에 포함된 개별 출고 내역을 모두 반환
+            return string.Join(Environment.NewLine,
+                events.Skip(bestStart).Take(bestEnd - bestStart)
+                      .Select(x => $"{x.Info.dock} / {x.Time:yyyy-MM-dd HH:mm:ss} / {x.Info.tyreCount}"));
+        }
+
         // 실행 버튼: 기존 결과를 지우고 스태커 → 갠트리 순서로 읽기/저장/그래프 갱신
        
 
@@ -733,23 +805,25 @@ namespace ThroughputTest
         private void combo_graph_view_SelectedIndexChanged(object sender, EventArgs e)
         {
             AddLog("그래프 전환: " + Combo_Graph.Text);
-            if (Combo_Graph.SelectedIndex == 0)
+
+            m_stackerViewer.Hide();
+            m_gentryViewer.Hide();
+            m_gentryViewer2.Hide();
+            m_gentryViewer3.Hide();
+            switch (Combo_Graph.SelectedIndex)
             {
-                m_stackerViewer.Show();
-                m_gentryViewer.Hide();
-                m_gentryViewer2.Hide();
-            }
-            else if (Combo_Graph.SelectedIndex == 1)
-            {
-                m_stackerViewer.Hide();
-                m_gentryViewer.Show();
-                m_gentryViewer2.Hide();
-            }
-            else
-            {
-                m_stackerViewer.Hide();
-                m_gentryViewer.Hide();
-                m_gentryViewer2.Show();
+                case 1:
+                    m_gentryViewer.Show();
+                    break;
+                case 2:
+                    m_gentryViewer2.Show();
+                    break;
+                case 3:
+                    m_gentryViewer3.Show();
+                    break;
+                default:
+                    m_stackerViewer.Show();
+                    break;
             }
         }
         // 캡처 버튼: 전체 화면을 "날짜_그래프종류.jpg"로 저장

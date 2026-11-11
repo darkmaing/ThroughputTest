@@ -50,6 +50,10 @@
             this.Btn_Capture = new System.Windows.Forms.Button();
             this.label_gantry_data2 = new System.Windows.Forms.Label();
             this.GENTRY_DATA2 = new System.Windows.Forms.ListView();
+            this.GENTRY_DATA3 = new System.Windows.Forms.ListView();
+            this.columnHeader4 = new System.Windows.Forms.ColumnHeader();
+            this.columnHeader5 = new System.Windows.Forms.ColumnHeader();
+            this.columnHeader6 = new System.Windows.Forms.ColumnHeader();
             this.columnHeader1 = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
             this.columnHeader2 = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
             this.columnHeader3 = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
@@ -123,14 +127,14 @@
             // 
             // Btn_Output_Data
             // 
-            this.Btn_Output_Data.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(190)))), ((int)(((byte)(170)))), ((int)(((byte)(240)))));
-            this.Btn_Output_Data.ForeColor = System.Drawing.Color.White;
             this.Btn_Output_Data.Location = new System.Drawing.Point(12, 67);
             this.Btn_Output_Data.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.Btn_Output_Data.Name = "Btn_Output_Data";
             this.Btn_Output_Data.Size = new System.Drawing.Size(399, 27);
             this.Btn_Output_Data.TabIndex = 6;
             this.Btn_Output_Data.Text = "데이터 출력";
+            this.Btn_Output_Data.BackColor = System.Drawing.Color.FromArgb(190, 170, 240);
+            this.Btn_Output_Data.ForeColor = System.Drawing.Color.White;
             this.Btn_Output_Data.UseVisualStyleBackColor = false;
             this.Btn_Output_Data.Click += new System.EventHandler(this.Btn_Output_Data_Click);
             // 
@@ -156,9 +160,9 @@
             this.STACKER_DATA.FullRowSelect = true;
             this.STACKER_DATA.GridLines = true;
             this.STACKER_DATA.HideSelection = false;
-            this.STACKER_DATA.Location = new System.Drawing.Point(2, 45);
+            this.STACKER_DATA.Location = new System.Drawing.Point(2, 48);
             this.STACKER_DATA.Name = "STACKER_DATA";
-            this.STACKER_DATA.Size = new System.Drawing.Size(196, 207);
+            this.STACKER_DATA.Size = new System.Drawing.Size(196, 245);
             this.STACKER_DATA.TabIndex = 9;
             this.STACKER_DATA.UseCompatibleStateImageBehavior = false;
             this.STACKER_DATA.View = System.Windows.Forms.View.Details;
@@ -177,8 +181,7 @@
             // 
             // label_Stalker
             // 
-            this.label_Stalker.Font = new System.Drawing.Font("굴림", 10F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(129)));
-            this.label_Stalker.Location = new System.Drawing.Point(6, 1);
+            this.label_Stalker.Location = new System.Drawing.Point(6, 3);
             this.label_Stalker.Name = "label_Stalker";
             this.label_Stalker.Size = new System.Drawing.Size(195, 22);
             this.label_Stalker.TabIndex = 10;
@@ -187,8 +190,7 @@
             // 
             // label_Stalker_data
             // 
-            this.label_Stalker_data.Font = new System.Drawing.Font("굴림", 10F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(129)));
-            this.label_Stalker_data.Location = new System.Drawing.Point(2, -1);
+            this.label_Stalker_data.Location = new System.Drawing.Point(2, 2);
             this.label_Stalker_data.Name = "label_Stalker_data";
             this.label_Stalker_data.Size = new System.Drawing.Size(204, 22);
             this.label_Stalker_data.TabIndex = 12;
@@ -204,9 +206,9 @@
             this.GENTRY_DATA.FullRowSelect = true;
             this.GENTRY_DATA.GridLines = true;
             this.GENTRY_DATA.HideSelection = false;
-            this.GENTRY_DATA.Location = new System.Drawing.Point(3, 45);
+            this.GENTRY_DATA.Location = new System.Drawing.Point(3, 48);
             this.GENTRY_DATA.Name = "GENTRY_DATA";
-            this.GENTRY_DATA.Size = new System.Drawing.Size(207, 207);
+            this.GENTRY_DATA.Size = new System.Drawing.Size(207, 245);
             this.GENTRY_DATA.TabIndex = 13;
             this.GENTRY_DATA.UseCompatibleStateImageBehavior = false;
             this.GENTRY_DATA.View = System.Windows.Forms.View.Details;
@@ -256,7 +258,7 @@
             // 
             // label_gantry_data2
             // 
-            this.label_gantry_data2.Location = new System.Drawing.Point(12, 377);
+            this.label_gantry_data2.Location = new System.Drawing.Point(12, 417);
             this.label_gantry_data2.Name = "label_gantry_data2";
             this.label_gantry_data2.Size = new System.Drawing.Size(123, 22);
             this.label_gantry_data2.TabIndex = 25;
@@ -272,7 +274,7 @@
             this.GENTRY_DATA2.FullRowSelect = true;
             this.GENTRY_DATA2.GridLines = true;
             this.GENTRY_DATA2.HideSelection = false;
-            this.GENTRY_DATA2.Location = new System.Drawing.Point(7, 397);
+            this.GENTRY_DATA2.Location = new System.Drawing.Point(7, 438);
             this.GENTRY_DATA2.Name = "GENTRY_DATA2";
             this.GENTRY_DATA2.Size = new System.Drawing.Size(409, 183);
             this.GENTRY_DATA2.TabIndex = 26;
@@ -296,23 +298,21 @@
             // 
             // Label_Stack_Date
             // 
-            this.Label_Stack_Date.Font = new System.Drawing.Font("새굴림", 6F, System.Drawing.FontStyle.Italic, System.Drawing.GraphicsUnit.Point, ((byte)(129)));
-            this.Label_Stack_Date.Location = new System.Drawing.Point(9, 22);
+            this.Label_Stack_Date.Location = new System.Drawing.Point(7, 25);
             this.Label_Stack_Date.Name = "Label_Stack_Date";
-            this.Label_Stack_Date.Size = new System.Drawing.Size(187, 23);
+            this.Label_Stack_Date.Size = new System.Drawing.Size(191, 22);
             this.Label_Stack_Date.TabIndex = 27;
             this.Label_Stack_Date.Text = "Date : ";
-            this.Label_Stack_Date.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            this.Label_Stack_Date.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             // 
             // Label_Gantry_Date
             // 
-            this.Label_Gantry_Date.Font = new System.Drawing.Font("새굴림", 6F, System.Drawing.FontStyle.Italic, System.Drawing.GraphicsUnit.Point, ((byte)(129)));
-            this.Label_Gantry_Date.Location = new System.Drawing.Point(5, 21);
+            this.Label_Gantry_Date.Location = new System.Drawing.Point(3, 23);
             this.Label_Gantry_Date.Name = "Label_Gantry_Date";
-            this.Label_Gantry_Date.Size = new System.Drawing.Size(205, 24);
+            this.Label_Gantry_Date.Size = new System.Drawing.Size(191, 22);
             this.Label_Gantry_Date.TabIndex = 28;
             this.Label_Gantry_Date.Text = "Date : ";
-            this.Label_Gantry_Date.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            this.Label_Gantry_Date.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             // 
             // panel1
             // 
@@ -322,9 +322,39 @@
             this.panel1.Controls.Add(this.STACKER_DATA);
             this.panel1.Location = new System.Drawing.Point(5, 124);
             this.panel1.Name = "panel1";
-            this.panel1.Size = new System.Drawing.Size(201, 256);
+            this.panel1.Size = new System.Drawing.Size(201, 294);
             this.panel1.TabIndex = 29;
             // 
+            // GENTRY_DATA3
+            // 
+            this.GENTRY_DATA3.Columns.AddRange(new System.Windows.Forms.ColumnHeader[] {
+            this.columnHeader4,
+            this.columnHeader5,
+            this.columnHeader6});
+            this.GENTRY_DATA3.FullRowSelect = true;
+            this.GENTRY_DATA3.GridLines = true;
+            this.GENTRY_DATA3.HideSelection = false;
+            this.GENTRY_DATA3.Location = new System.Drawing.Point(7, 627);
+            this.GENTRY_DATA3.Name = "GENTRY_DATA3";
+            this.GENTRY_DATA3.Size = new System.Drawing.Size(409, 183);
+            this.GENTRY_DATA3.TabIndex = 31;
+            this.GENTRY_DATA3.UseCompatibleStateImageBehavior = false;
+            this.GENTRY_DATA3.View = System.Windows.Forms.View.Details;
+            // 
+            // columnHeader4
+            // 
+            this.columnHeader4.Text = "Dock";
+            this.columnHeader4.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
+            // 
+            // columnHeader5
+            // 
+            this.columnHeader5.Text = "Time";
+            this.columnHeader5.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
+            // 
+            // columnHeader6
+            // 
+            this.columnHeader6.Text = "Total";
+            this.columnHeader6.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;            // 
             // panel2
             // 
             this.panel2.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
@@ -333,7 +363,7 @@
             this.panel2.Controls.Add(this.GENTRY_DATA);
             this.panel2.Location = new System.Drawing.Point(205, 124);
             this.panel2.Name = "panel2";
-            this.panel2.Size = new System.Drawing.Size(211, 256);
+            this.panel2.Size = new System.Drawing.Size(211, 294);
             this.panel2.TabIndex = 30;
             // 
             // Main
@@ -344,6 +374,7 @@
             this.ClientSize = new System.Drawing.Size(1893, 933);
             this.Controls.Add(this.panel2);
             this.Controls.Add(this.panel1);
+            this.Controls.Add(this.GENTRY_DATA3);
             this.Controls.Add(this.GENTRY_DATA2);
             this.Controls.Add(this.label_gantry_data2);
             this.Controls.Add(this.Btn_Capture);
@@ -393,6 +424,10 @@
         private System.Windows.Forms.ColumnHeader columnHeader1;
         private System.Windows.Forms.ColumnHeader columnHeader2;
         private System.Windows.Forms.ColumnHeader columnHeader3;
+        private System.Windows.Forms.ListView GENTRY_DATA3;
+        private System.Windows.Forms.ColumnHeader columnHeader4;
+        private System.Windows.Forms.ColumnHeader columnHeader5;
+        private System.Windows.Forms.ColumnHeader columnHeader6;
         private System.Windows.Forms.Label Label_Stack_Date;
         private System.Windows.Forms.Label Label_Gantry_Date;
         private System.Windows.Forms.Panel panel1;
